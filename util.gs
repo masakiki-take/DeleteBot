@@ -1,7 +1,9 @@
 //----------------------------------------------------------------------------------------
-// '予告済みファイル削除'または'削除予告' をします（deleteFlagでどちらかの機能が決定）
+// '予告済みファイル削除'または'削除予告' をします（executeDeleteでどちらかの機能が決定）　
 //----------------------------------------------------------------------------------------
-function deleteOldFile(channelName,result,deleteFlag) {
+function deleteOldFile(channelName,executeDelete) {
+  
+  // TODO:Support for alternative method
   
   //指定したチャンネルの検索
   var channelId = existsId(channelName)
@@ -9,63 +11,73 @@ function deleteOldFile(channelName,result,deleteFlag) {
     return postSlack(channelName +' は存在しません。')
   }
   
+  //削除対象リストを初期化
+  var result = []
+  
   var options = {
     channel: channelId,
     count: 1000
   }
   
-  if (deleteFlag) {
+  //本日の日付を取得
+  var to = new Date()
+  
+  if (executeDelete) {
     
     // 削除の実行
-    filesList(options).files.forEach(function(val){
+    getFilesList(options).files.forEach(function(val){
       
-      var from = val.created
       //日付（先月を指定する）
-      var n = DeleteMonth
-      var to = new Date()
-      to.setMonth(to.getMonth() + n )
+      to.setMonth(to.getMonth() + DeleteMonth )
       
       //削除対象日の検索
+      var from = val.created
       var isDelete = dayCount(from,to) 
       
       //ファイル投稿してから現在までの経過日付 >= ユーザー指定日付
       if (isDelete) {
+        Logger.log("isDelete-%s filename -- %s",isDelete,val.name)
         
         //ファイルの削除の実行
-        filesDelete(val.id)
+        deleteFile(val.id)
         result.push(val.name)
       }
     })
-  } else if(!deleteFlag) {
+  } else if(!executeDelete) {
     
     //削除ファイルの通知
-    filesList(options).files.forEach(function(val){
+    getFilesList(options).files.forEach(function(val){
       
       var from = val.created
-      var to = new Date
       
       //削除対象日の検索
       var isDelete = dayCount(from,to) 
       if (isDelete) {
         
         //通知対象を詰め込む
-        var filesInfo = templateText(val,channelName)
+        var filesInfo = getFileCommentLog(val,channelName)
         result.push(filesInfo)
       }
     })
   }
+  
+  return result
 }
 
 //----------------------------------------------------------
 // SlackWebAPI　実行用
 //----------------------------------------------------------
-function getData(method,requestMethod,params) {
+function postData(method,requestMethod,params) {
+  
+  // TODO:Support for alternative method
+  
   var url = ''
   var options = ''
   
   if ("GET" === requestMethod) {
     var extra = ''
     if(params) {
+      
       extra = Object.keys(params).map(function(k) {
         return Utilities.formatString("&%s=%s", k, params[k])
       }).join('')
@@ -96,9 +108,9 @@ function getData(method,requestMethod,params) {
 //----------------------------------------------------------
 // チャンネル名を検索してIDを取得
 //----------------------------------------------------------
-function channelNameToId(name) {
+function getChannelId(name) {
   
-  var channelsList=getData("channels.list","GET",'')
+  var channelsList=postData("channels.list","GET")
   var foundChannelsId = ''
   var isFound = channelsList.channels.some(function(channels){
     if (channels.name.match(name)){
@@ -112,9 +124,9 @@ function channelNameToId(name) {
 //----------------------------------------------------------
 // チャンネル名を検索してIDを取得（鍵有トークルーム用）
 //----------------------------------------------------------
-function groupNameToId(name) {
+function getGroupId(name) {
   
-  var groupsList=getData("groups.list","GET",'')
+  var groupsList=postData("groups.list","GET")
   var foundGroupsId = ''
   var isFound = groupsList.groups.some(function(groups){
     if (groups.name.match(name)){
@@ -128,20 +140,20 @@ function groupNameToId(name) {
 //----------------------------------------------------------
 // ファイルの削除
 //----------------------------------------------------------
-function filesDelete(file){
+function deleteFile(file){
   
   var params = {
     'token': SLACK_ACCESS_TOKEN,
     'file': file,
   }
-  var data = getData("files.delete","POST",params)
+  var data = postData("files.delete","POST",params)
   return　data
 }
 
 //----------------------------------------------------------
 // ファイルのリストを検索
 //----------------------------------------------------------
-function filesList(data){
+function getFilesList(data){
   
   var params = {
     'token': SLACK_ACCESS_TOKEN,
@@ -150,7 +162,7 @@ function filesList(data){
     'types': FileType
   }
   
-  var res = getData("files.list","POST",params)
+  var res = postData("files.list","POST",params)
   return res
 }
 
@@ -161,7 +173,6 @@ function postSlack(text) {
   
   // 投稿先チャンネル
   var url = SlackPostChannel
-  
   var payload = {
     'text': text.replace(/'/g,'')
   }
@@ -181,7 +192,7 @@ function postSlack(text) {
 function existsId(channelName) {
   
   //チャンネルの検索
-  var result = channelNameToId(channelName) || groupNameToId(channelName)
+  var result = getChannelId(channelName) || getGroupId(channelName)
   
   return result
 }
@@ -217,7 +228,7 @@ function dayCount(from,to) {
 //----------------------------------------------------------
 // ログのテンプレートを作成します
 //----------------------------------------------------------
-function templateText(val,channelName) {
+function getFileCommentLog(val,channelName) {
   
   var result = ''
   
@@ -229,7 +240,7 @@ function templateText(val,channelName) {
   created = dateToString(created)
   
   // ユーザー名
-  var usersList = getData("users.list","GET",'')
+  var usersList = postData("users.list","GET")
   var foundUserName = '不明'
   usersList.members.some(function(users){
     if (users.id.match(val.user)){
@@ -240,7 +251,6 @@ function templateText(val,channelName) {
   
   // コメント
   var foundComment = getFileComment(val.id)
-  
   
   //データの整形
   var format = "[%s] - %s `%s` %s %s"
@@ -254,12 +264,11 @@ function templateText(val,channelName) {
 //----------------------------------------------------------
 function getFileComment(fileId) {
   
-  var fileInfo = getData('files.info',"GET",{'file': fileId}).file
-  
+  var fileInfo = postData('files.info',"GET",{'file': fileId}).file
   
   if (Object.keys(fileInfo.channels).length == 1 ){
-  
-    return getData('channels.replies',"GET", {
+    
+    return postData('channels.replies',"GET", {
       'channel': fileInfo.channels[0],
       'thread_ts': fileInfo.shares.public[fileInfo.channels[0]][0].ts
     }).messages[0].text
@@ -269,13 +278,13 @@ function getFileComment(fileId) {
     // 複数チャネルに共有されている場合
     var channelNameList = [] 
     var commentList = fileInfo.channels.map(function(channel,i){
-      Logger.log(channelNameList.push(fileInfo.shares.public[channel][0].channel_name))
-      var data = getData('channels.replies',"GET", {
+      //      Logger.log(channelNameList.push(fileInfo.shares.public[channel][0].channel_name))
+      return postData('channels.replies',"GET", {
         'channel': fileInfo.channels[i],
         'thread_ts': fileInfo.shares.public[channel][0].ts
       }).messages[0].text
-      return data
     })
-    return commentList.join('')                     
+    
+    return commentList.join("")         
   }
 }

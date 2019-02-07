@@ -37,7 +37,7 @@ var errorAnnounceInUseStorageExecutioner = sheet.getRange("B25")
 //----------------------------------------------------------------------
 function fileDeleteExecutioner(){
   
-  const deleteFlag = true
+  const executeDelete = true
   var result = [] //削除対象リスト
   
   try {
@@ -46,10 +46,13 @@ function fileDeleteExecutioner(){
     errorFileDeleteExecutioner.setValue("")
     
     for (var i in targetChannels) {
-      deleteOldFile(targetChannels[i],result,deleteFlag)
+      
+      result = result.concat(deleteOldFile(targetChannels[i],executeDelete))
     }
     
-    if(result.length != 0) {
+    Logger.log("fileDeleteExecutioner -- %s",result)
+    
+    if(result.length > 0) {
       
       var text = sheet.getRange('B12').getValues().toString()
       return postSlack(text)
@@ -69,7 +72,7 @@ function fileDeleteExecutioner(){
 //----------------------------------------------------------
 function deleteAnnounceExecutioner(){
   
-  const deleteFlag = false
+  const executeDelete = false
   var result = [] //削除対象リスト
   
   try {
@@ -79,8 +82,11 @@ function deleteAnnounceExecutioner(){
     
     //削除予定ファイルの検索
     for (var i in targetChannels) {
-      deleteOldFile(targetChannels[i],result,deleteFlag)
+      
+      result = result.concat(deleteOldFile(targetChannels[i],executeDelete))
     }
+    
+    Logger.log("deleteAnnounceExecutioner -- %s",result)
     
     //日付（翌月を指定する）
     var n = 1
@@ -88,7 +94,7 @@ function deleteAnnounceExecutioner(){
     date.setMonth(date.getMonth() + n )
     date = dateToString(date).substring(0,6)
     
-    if(result.length != 0) {
+    if(result.length > 0) {
       
       // 削除予告ありの場合は削除対象ファイル名を配列に詰め込む
       var text = sheet.getRange('B7').getValues().toString()
